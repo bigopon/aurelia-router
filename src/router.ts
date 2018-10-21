@@ -387,7 +387,7 @@ export class Router {
         'default': {
           moduleId: config.moduleId,
           view: config.view
-        }
+        } as RouteConfig
       };
     }
 
@@ -693,7 +693,7 @@ function evaluateNavigationStrategy(
       instruction.config.viewPorts = {
         'default': {
           moduleId: instruction.config.moduleId
-        }
+        } as RouteConfig
       };
     }
 
