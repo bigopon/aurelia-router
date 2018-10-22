@@ -72,7 +72,8 @@ describe('NavigationPlanStep', () => {
         expect(e instanceof Redirect).toBe(true);
         expect(e.url).toBe('#/second?q=1');
         done();
-      });
+      })
+      .catch(done.fail);
   });
 
   it('redirects to routes with static parameters', (done) => {
@@ -89,7 +90,8 @@ describe('NavigationPlanStep', () => {
           expect(e instanceof Redirect).toBe(true);
           expect(e.url).toBe(`#/second/0?q=1`);
           done();
-        });
+        })
+        .catch(done.fail);
     });
   });
 
@@ -107,7 +109,8 @@ describe('NavigationPlanStep', () => {
           expect(e instanceof Redirect).toBe(true);
           expect(e.url).toBe(`#/second/10?q=1`);
           done();
-        });
+        })
+        .catch(done.fail);
     });
   });
 
@@ -125,7 +128,8 @@ describe('NavigationPlanStep', () => {
           expect(e instanceof Redirect).toBe(true);
           expect(e.url).toBe(`#/second/20?q=1`);
           done();
-        });
+        })
+        .catch(done.fail);
     });
   });
 
@@ -143,7 +147,8 @@ describe('NavigationPlanStep', () => {
           expect(e instanceof Redirect).toBe(true);
           expect(e.url).toBe(`#/second?q=1`);
           done();
-        });
+        })
+        .catch(done.fail);
     });
   });
 
@@ -164,7 +169,8 @@ describe('NavigationPlanStep', () => {
             expect(e instanceof Redirect).toBe(true);
             expect(e.url).toBe(`#/home/second`);
             done();
-          });
+          })
+          .catch(done.fail);
       });
     });
   });
@@ -176,7 +182,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(firstInstruction.plan).toBeTruthy();
           done();
-        });
+        })
+        .catch(done.fail);
     });
 
     it('with prev step', (done) => {
@@ -185,7 +192,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(secondInstruction.plan).toBeTruthy();
           done();
-        });
+        })
+        .catch(done.fail);
     });
 
     it('with prev step with viewport', (done) => {
@@ -196,7 +204,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(secondInstruction.plan).toBeTruthy();
           done();
-        });
+        })
+        .catch(done.fail);
     });
   });
 
@@ -209,7 +218,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(secondInstruction.plan.default.strategy).toBe('replace');
           done();
-        });
+        })
+        .catch(done.fail);
     });
 
     it('is no-change when nothing changes', (done) => {
@@ -220,7 +230,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(sameAsFirstInstruction.plan.default.strategy).toBe('no-change');
           done();
-        });
+        })
+        .catch(done.fail);
     });
 
     it('can be determined by route config', (done) => {
@@ -232,7 +243,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(sameAsFirstInstruction.plan.default.strategy).toBe('fake-strategy');
           done();
-        });
+        })
+        .catch(done.fail);
     });
 
     it('can be determined by view model', (done) => {
@@ -244,7 +256,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(sameAsFirstInstruction.plan.default.strategy).toBe('vm-strategy');
           done();
-        });
+        })
+        .catch(done.fail);
     });
 
     it('is invoke-lifecycle when only params change', (done) => {
@@ -257,7 +270,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(sameAsFirstInstruction.plan.default.strategy).toBe('invoke-lifecycle');
           done();
-        });
+        })
+        .catch(done.fail);
     });
 
     it('is invoke-lifecycle when query params change and ignoreQueryParams is false', (done) => {
@@ -271,7 +285,8 @@ describe('NavigationPlanStep', () => {
           expect(state.result).toBe(true);
           expect(sameAsFirstInstruction.plan.default.strategy).toBe('invoke-lifecycle');
           done();
-        });
+        })
+        .catch(done.fail);
     });
   });
 });

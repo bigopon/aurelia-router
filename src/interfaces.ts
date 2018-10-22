@@ -283,7 +283,7 @@ export interface ViewPortPlan {
 
   prevComponent?: ViewPortComponent;
   prevModuleId?: string;
-  prevViewModel?: ViewModelSpecifier;
+  prevViewModel?: string | Function | null;
   childNavigationInstruction?: NavigationInstruction;
 }
 
