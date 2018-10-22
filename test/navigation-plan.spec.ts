@@ -152,27 +152,29 @@ describe('NavigationPlanStep', function NavigationPlanStep_Test() {
     });
   });
 
-  it('redirects children', (done) => {
-    const url = 'home/first';
-    const base = { name: 'home', route: 'home', moduleId: './home' };
-    const from = { name: 'first', route: 'first', redirect: 'second' };
-    const to = { name: 'second', route: 'second', moduleId: './second' };
+  it('redirects children', async (done) => {
+    try {
+      const url = 'home/first';
+      const base = { name: 'home', route: 'home', moduleId: './home' };
+      const from = { name: 'first', route: 'first', redirect: 'second' };
+      const to = { name: 'second', route: 'second', moduleId: './second' };
 
-    router.addRoute(base);
-    child.configure(config => config.map([from, to]));
-    router.navigate('home');
-    router._createNavigationInstruction(url).then((parentInstruction) => {
-      child._createNavigationInstruction(parentInstruction.getWildcardPath(), parentInstruction).then(childInstruction => {
-        step.run(childInstruction, state.next)
-          .then(e => {
-            expect(state.rejection).toBeTruthy();
-            expect(e instanceof Redirect).toBe(true);
-            expect(e.url).toBe(`#/home/second`);
-            done();
-          })
-          .catch(done.fail);
-      });
-    });
+      router.addRoute(base);
+      child.configure(config => config.map([from, to]));
+      router.navigate('home');
+      const parentInstruction = await router._createNavigationInstruction(url);
+      const childInstruction = await child._createNavigationInstruction(
+        parentInstruction.getWildcardPath(),
+        parentInstruction
+      );
+      const result = await step.run(childInstruction, state.next);
+      expect(state.rejection).toBeTruthy();
+      expect(result instanceof Redirect).toBe(true);
+      expect(result.url).toBe(`#/home/second`);
+      done();
+    } catch (ex) {
+      done.fail(ex);
+    }
   });
 
   describe('generates navigation plans', function NavigationPlan_Generation_Test() {
