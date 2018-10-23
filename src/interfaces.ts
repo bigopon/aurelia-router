@@ -14,6 +14,8 @@ declare module 'aurelia-dependency-injection' {
   }
 }
 
+export type Constructable<T = any> = { new(...args: any[]): T };
+
 export type RouteConfigSpecifier = string | RouteConfig | ((instruction: NavigationInstruction) => string | RouteConfig | Promise<string | RouteConfig>);
 
 export type ViewModelSpecifier = () => Function | Promise<Function | Record<string, any>>;
