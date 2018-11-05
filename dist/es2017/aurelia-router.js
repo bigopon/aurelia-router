@@ -70,50 +70,24 @@ class RedirectToRoute extends Redirect {
     }
 }
 
-/*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use
-this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0
-
-THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
-MERCHANTABLITY OR NON-INFRINGEMENT.
-
-See the Apache Version 2.0 License for specific language governing permissions
-and limitations under the License.
-***************************************************************************** */
-
-function __awaiter(thisArg, _arguments, P, generator) {
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-}
-
 /**@internal exported for unit testing */
-function resolveViewModel(viewPortInstruction) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if ("moduleId" /* moduleId */ in viewPortInstruction) {
-            return viewPortInstruction.moduleId;
+async function resolveViewModel(viewPortInstruction) {
+    if ("moduleId" /* moduleId */ in viewPortInstruction) {
+        return viewPortInstruction.moduleId;
+    }
+    if ("viewModel" /* viewModel */ in viewPortInstruction) {
+        // to have undefined as context
+        let vm = viewPortInstruction.viewModel;
+        let $viewModel = await vm();
+        if ($viewModel && typeof $viewModel === 'object') {
+            $viewModel = $viewModel.default;
         }
-        if ("viewModel" /* viewModel */ in viewPortInstruction) {
-            // to have undefined as context
-            let vm = viewPortInstruction.viewModel;
-            let $viewModel = yield vm();
-            if ($viewModel && typeof $viewModel === 'object') {
-                $viewModel = $viewModel.default;
-            }
-            if (typeof $viewModel !== 'function' && $viewModel !== null) {
-                throw new Error(`Invalid viewModel specification in ${viewPortInstruction.name || ''} viewport/route config`);
-            }
-            return $viewModel;
+        if (typeof $viewModel !== 'function' && $viewModel !== null) {
+            throw new Error(`Invalid viewModel specification in ${viewPortInstruction.name || ''} viewport/route config`);
         }
-        throw new Error(`moduleId/viewModel not found in ${viewPortInstruction.name || ''} viewport/route config`);
-    });
+        return $viewModel;
+    }
+    throw new Error(`moduleId/viewModel not found in ${viewPortInstruction.name || ''} viewport/route config`);
 }
 
 /**
@@ -137,112 +111,110 @@ class BuildNavigationPlanStep {
             .catch(next.cancel);
     }
 }
-function _buildNavigationPlan(instruction, forceLifecycleMinimum) {
-    return __awaiter(this, void 0, void 0, function* () {
-        let config = instruction.config;
-        if ('redirect' in config) {
-            const router = instruction.router;
-            const newInstruction = yield router._createNavigationInstruction(config.redirect);
-            const params = {};
-            for (let key in newInstruction.params) {
-                // If the param on the redirect points to another param, e.g. { route: first/:this, redirect: second/:this }
-                let val = newInstruction.params[key];
-                if (typeof val === 'string' && val[0] === ':') {
-                    val = val.slice(1);
-                    // And if that param is found on the original instruction then use it
-                    if (val in instruction.params) {
-                        params[key] = instruction.params[val];
-                    }
-                }
-                else {
-                    params[key] = newInstruction.params[key];
+async function _buildNavigationPlan(instruction, forceLifecycleMinimum) {
+    let config = instruction.config;
+    if ('redirect' in config) {
+        const router = instruction.router;
+        const newInstruction = await router._createNavigationInstruction(config.redirect);
+        const params = {};
+        for (let key in newInstruction.params) {
+            // If the param on the redirect points to another param, e.g. { route: first/:this, redirect: second/:this }
+            let val = newInstruction.params[key];
+            if (typeof val === 'string' && val[0] === ':') {
+                val = val.slice(1);
+                // And if that param is found on the original instruction then use it
+                if (val in instruction.params) {
+                    params[key] = instruction.params[val];
                 }
             }
-            let redirectLocation = router.generate(newInstruction.config.name, params, instruction.options);
-            if (instruction.queryString) {
-                redirectLocation += '?' + instruction.queryString;
+            else {
+                params[key] = newInstruction.params[key];
             }
-            return new Redirect(redirectLocation);
         }
-        const prev = instruction.previousInstruction;
-        const viewPortPlans = {};
-        const defaults = instruction.router.viewPortDefaults;
-        if (prev) {
-            let hasNewParams = hasDifferentParameterValues(prev, instruction);
-            let pending = [];
-            for (let viewPortName in prev.viewPortInstructions) {
-                const prevViewPortInstruction = prev.viewPortInstructions[viewPortName];
-                let nextViewPortConfig = viewPortName in config.viewPorts
-                    ? config.viewPorts[viewPortName]
-                    : prevViewPortInstruction;
-                if (nextViewPortConfig.moduleId === null && viewPortName in instruction.router.viewPortDefaults) {
-                    nextViewPortConfig = defaults[viewPortName];
-                }
-                // Cannot simply do an equality comparison as user may have code like this:
-                // { route: 'a', viewModel: () => import('a') }
-                // { route: 'b', viewModel: () => import('a') }
-                // the two viewModel factories are different, but they are expected to be the same
-                // as they points to the same default export from module 'a'
-                let prevViewModelTarget = yield resolveViewModel(prevViewPortInstruction);
-                let nextViewModelTarget = yield resolveViewModel(nextViewPortConfig);
-                const viewPortPlan = viewPortPlans[viewPortName] = {
-                    strategy: activationStrategy.noChange,
-                    name: viewPortName,
-                    config: nextViewPortConfig,
-                    prevComponent: prevViewPortInstruction.component,
-                    prevModuleId: prevViewModelTarget,
-                    prevViewModel: prevViewModelTarget
-                };
-                if (prevViewModelTarget !== nextViewModelTarget) {
-                    viewPortPlan.strategy = activationStrategy.replace;
-                }
-                else if ('determineActivationStrategy' in prevViewPortInstruction.component.viewModel) {
-                    viewPortPlan.strategy = prevViewPortInstruction.component.viewModel
-                        .determineActivationStrategy(...instruction.lifecycleArgs);
-                }
-                else if (config.activationStrategy) {
-                    viewPortPlan.strategy = config.activationStrategy;
-                }
-                else if (hasNewParams || forceLifecycleMinimum) {
-                    viewPortPlan.strategy = activationStrategy.invokeLifecycle;
-                }
-                else {
-                    viewPortPlan.strategy = activationStrategy.noChange;
-                }
-                if (viewPortPlan.strategy !== activationStrategy.replace && prevViewPortInstruction.childRouter) {
-                    const path = instruction.getWildcardPath();
-                    const task = prevViewPortInstruction
-                        .childRouter
-                        ._createNavigationInstruction(path, instruction)
-                        .then((childNavInstruction) => __awaiter(this, void 0, void 0, function* () {
-                        viewPortPlan.childNavigationInstruction = childNavInstruction;
-                        const childPlanOrRedirect = yield _buildNavigationPlan(childNavInstruction, viewPortPlan.strategy === activationStrategy.invokeLifecycle);
-                        if (childPlanOrRedirect instanceof Redirect) {
-                            return Promise.reject(childPlanOrRedirect);
-                        }
-                        childNavInstruction.plan = childPlanOrRedirect;
-                        // for bluebird ?
-                        return null;
-                    }));
-                    pending.push(task);
-                }
-            }
-            yield Promise.all(pending);
-            return viewPortPlans;
+        let redirectLocation = router.generate(newInstruction.config.name, params, instruction.options);
+        if (instruction.queryString) {
+            redirectLocation += '?' + instruction.queryString;
         }
-        for (let viewPortName in config.viewPorts) {
-            let viewPortConfig = config.viewPorts[viewPortName];
-            if (viewPortConfig.moduleId === null && viewPortName in instruction.router.viewPortDefaults) {
-                viewPortConfig = defaults[viewPortName];
+        return new Redirect(redirectLocation);
+    }
+    const prev = instruction.previousInstruction;
+    const viewPortPlans = {};
+    const defaults = instruction.router.viewPortDefaults;
+    if (prev) {
+        let hasNewParams = hasDifferentParameterValues(prev, instruction);
+        let pending = [];
+        for (let viewPortName in prev.viewPortInstructions) {
+            const prevViewPortInstruction = prev.viewPortInstructions[viewPortName];
+            let nextViewPortConfig = viewPortName in config.viewPorts
+                ? config.viewPorts[viewPortName]
+                : prevViewPortInstruction;
+            if (nextViewPortConfig.moduleId === null && viewPortName in instruction.router.viewPortDefaults) {
+                nextViewPortConfig = defaults[viewPortName];
             }
-            viewPortPlans[viewPortName] = {
+            // Cannot simply do an equality comparison as user may have code like this:
+            // { route: 'a', viewModel: () => import('a') }
+            // { route: 'b', viewModel: () => import('a') }
+            // the two viewModel factories are different, but they are expected to be the same
+            // as they points to the same default export from module 'a'
+            let prevViewModelTarget = await resolveViewModel(prevViewPortInstruction);
+            let nextViewModelTarget = await resolveViewModel(nextViewPortConfig);
+            const viewPortPlan = viewPortPlans[viewPortName] = {
+                strategy: activationStrategy.noChange,
                 name: viewPortName,
-                strategy: activationStrategy.replace,
-                config: viewPortConfig
+                config: nextViewPortConfig,
+                prevComponent: prevViewPortInstruction.component,
+                prevModuleId: prevViewModelTarget,
+                prevViewModel: prevViewModelTarget
             };
+            if (prevViewModelTarget !== nextViewModelTarget) {
+                viewPortPlan.strategy = activationStrategy.replace;
+            }
+            else if ('determineActivationStrategy' in prevViewPortInstruction.component.viewModel) {
+                viewPortPlan.strategy = prevViewPortInstruction.component.viewModel
+                    .determineActivationStrategy(...instruction.lifecycleArgs);
+            }
+            else if (config.activationStrategy) {
+                viewPortPlan.strategy = config.activationStrategy;
+            }
+            else if (hasNewParams || forceLifecycleMinimum) {
+                viewPortPlan.strategy = activationStrategy.invokeLifecycle;
+            }
+            else {
+                viewPortPlan.strategy = activationStrategy.noChange;
+            }
+            if (viewPortPlan.strategy !== activationStrategy.replace && prevViewPortInstruction.childRouter) {
+                const path = instruction.getWildcardPath();
+                const task = prevViewPortInstruction
+                    .childRouter
+                    ._createNavigationInstruction(path, instruction)
+                    .then(async (childNavInstruction) => {
+                    viewPortPlan.childNavigationInstruction = childNavInstruction;
+                    const childPlanOrRedirect = await _buildNavigationPlan(childNavInstruction, viewPortPlan.strategy === activationStrategy.invokeLifecycle);
+                    if (childPlanOrRedirect instanceof Redirect) {
+                        return Promise.reject(childPlanOrRedirect);
+                    }
+                    childNavInstruction.plan = childPlanOrRedirect;
+                    // for bluebird ?
+                    return null;
+                });
+                pending.push(task);
+            }
         }
-        return Promise.resolve(viewPortPlans);
-    });
+        await Promise.all(pending);
+        return viewPortPlans;
+    }
+    for (let viewPortName in config.viewPorts) {
+        let viewPortConfig = config.viewPorts[viewPortName];
+        if (viewPortConfig.moduleId === null && viewPortName in instruction.router.viewPortDefaults) {
+            viewPortConfig = defaults[viewPortName];
+        }
+        viewPortPlans[viewPortName] = {
+            name: viewPortName,
+            strategy: activationStrategy.replace,
+            config: viewPortConfig
+        };
+    }
+    return Promise.resolve(viewPortPlans);
 }
 /**@internal exported for unit testing */
 function hasDifferentParameterValues(prev, next) {
@@ -514,12 +486,10 @@ var PropName;
 })(PropName || (PropName = {}));
 
 class CommitChangesStep {
-    run(navigationInstruction, next) {
-        return __awaiter(this, void 0, void 0, function* () {
-            yield navigationInstruction._commitChanges(true);
-            navigationInstruction._updateTitle();
-            return next();
-        });
+    async run(navigationInstruction, next) {
+        await navigationInstruction._commitChanges(true);
+        navigationInstruction._updateTitle();
+        return next();
     }
 }
 /**
@@ -649,52 +619,50 @@ class NavigationInstruction {
         return encodeURI(fragment.substr(0, fragment.lastIndexOf(path)));
     }
     /**@internal */
-    _commitChanges(waitToSwap) {
-        return __awaiter(this, void 0, void 0, function* () {
-            let router = this.router;
-            router.currentInstruction = this;
-            if (this.previousInstruction) {
-                this.previousInstruction.config.navModel.isActive = false;
+    async _commitChanges(waitToSwap) {
+        let router = this.router;
+        router.currentInstruction = this;
+        if (this.previousInstruction) {
+            this.previousInstruction.config.navModel.isActive = false;
+        }
+        this.config.navModel.isActive = true;
+        router.refreshNavigation();
+        let loads = [];
+        let delaySwaps = [];
+        for (let viewPortName in this.viewPortInstructions) {
+            let viewPortInstruction = this.viewPortInstructions[viewPortName];
+            let viewPort = router.viewPorts[viewPortName];
+            if (!viewPort) {
+                throw new Error(`There was no router-view found in the view for ${viewPortInstruction.moduleId}.`);
             }
-            this.config.navModel.isActive = true;
-            router.refreshNavigation();
-            let loads = [];
-            let delaySwaps = [];
-            for (let viewPortName in this.viewPortInstructions) {
-                let viewPortInstruction = this.viewPortInstructions[viewPortName];
-                let viewPort = router.viewPorts[viewPortName];
-                if (!viewPort) {
-                    throw new Error(`There was no router-view found in the view for ${viewPortInstruction.moduleId}.`);
-                }
-                if (viewPortInstruction.strategy === activationStrategy.replace) {
-                    if (viewPortInstruction.childNavigationInstruction && viewPortInstruction.childNavigationInstruction.parentCatchHandler) {
-                        loads.push(viewPortInstruction.childNavigationInstruction._commitChanges(waitToSwap));
-                    }
-                    else {
-                        if (waitToSwap) {
-                            delaySwaps.push({ viewPort, viewPortInstruction });
-                        }
-                        loads.push(viewPort
-                            .process(viewPortInstruction, waitToSwap)
-                            .then(() => {
-                            if (viewPortInstruction.childNavigationInstruction) {
-                                return viewPortInstruction.childNavigationInstruction._commitChanges(waitToSwap);
-                            }
-                            return Promise.resolve();
-                        }));
-                    }
+            if (viewPortInstruction.strategy === activationStrategy.replace) {
+                if (viewPortInstruction.childNavigationInstruction && viewPortInstruction.childNavigationInstruction.parentCatchHandler) {
+                    loads.push(viewPortInstruction.childNavigationInstruction._commitChanges(waitToSwap));
                 }
                 else {
-                    if (viewPortInstruction.childNavigationInstruction) {
-                        loads.push(viewPortInstruction.childNavigationInstruction._commitChanges(waitToSwap));
+                    if (waitToSwap) {
+                        delaySwaps.push({ viewPort, viewPortInstruction });
                     }
+                    loads.push(viewPort
+                        .process(viewPortInstruction, waitToSwap)
+                        .then(() => {
+                        if (viewPortInstruction.childNavigationInstruction) {
+                            return viewPortInstruction.childNavigationInstruction._commitChanges(waitToSwap);
+                        }
+                        return Promise.resolve();
+                    }));
                 }
             }
-            yield Promise.all(loads);
-            delaySwaps.forEach(x => x.viewPort.swap(x.viewPortInstruction));
-            yield Promise.resolve();
-            prune(this);
-        });
+            else {
+                if (viewPortInstruction.childNavigationInstruction) {
+                    loads.push(viewPortInstruction.childNavigationInstruction._commitChanges(waitToSwap));
+                }
+            }
+        }
+        await Promise.all(loads);
+        delaySwaps.forEach(x => x.viewPort.swap(x.viewPortInstruction));
+        await Promise.resolve();
+        prune(this);
     }
     /**@internal */
     _updateTitle() {
@@ -1656,62 +1624,58 @@ class LoadRouteStep {
     }
     return toLoad;
 }
-/*@internal*/ function loadRoute(routeLoader, navigationInstruction, viewPortPlan) {
-    return __awaiter(this, void 0, void 0, function* () {
-        let config = viewPortPlan.config;
-        let component = yield loadComponent(routeLoader, navigationInstruction, viewPortPlan.config);
-        // let viewPortInstruction = navigationInstruction.addViewPortInstruction(
-        //   viewPortPlan.name,
-        //   viewPortPlan.strategy,
-        //   moduleId,
-        //   component);
-        // Missing lifecycleArgs property
-        let partialInstruction = {
-            strategy: viewPortPlan.strategy,
-            component
-        };
-        if (config) {
-            if ("moduleId" /* moduleId */ in config) {
-                partialInstruction.moduleId = config.moduleId;
-            }
-            else {
-                partialInstruction.viewModel = config.viewModel;
-            }
+/*@internal*/ async function loadRoute(routeLoader, navigationInstruction, viewPortPlan) {
+    let config = viewPortPlan.config;
+    let component = await loadComponent(routeLoader, navigationInstruction, viewPortPlan.config);
+    // let viewPortInstruction = navigationInstruction.addViewPortInstruction(
+    //   viewPortPlan.name,
+    //   viewPortPlan.strategy,
+    //   moduleId,
+    //   component);
+    // Missing lifecycleArgs property
+    let partialInstruction = {
+        strategy: viewPortPlan.strategy,
+        component
+    };
+    if (config) {
+        if ("moduleId" /* moduleId */ in config) {
+            partialInstruction.moduleId = config.moduleId;
         }
-        let viewPortInstruction = navigationInstruction.addViewPortInstruction(viewPortPlan.name, 
-        // Missing lifecycleArgs property
-        partialInstruction);
-        let childRouter = component.childRouter;
-        if (childRouter) {
-            let path = navigationInstruction.getWildcardPath();
-            const childInstruction = yield childRouter._createNavigationInstruction(path, navigationInstruction);
-            viewPortPlan.childNavigationInstruction = childInstruction;
-            const childPlan = yield _buildNavigationPlan(childInstruction);
-            if (childPlan instanceof Redirect) {
-                return Promise.reject(childPlan);
-            }
-            childInstruction.plan = childPlan;
-            viewPortInstruction.childNavigationInstruction = childInstruction;
-            return loadNewRoute(routeLoader, childInstruction);
+        else {
+            partialInstruction.viewModel = config.viewModel;
         }
-        return undefined;
-    });
+    }
+    let viewPortInstruction = navigationInstruction.addViewPortInstruction(viewPortPlan.name, 
+    // Missing lifecycleArgs property
+    partialInstruction);
+    let childRouter = component.childRouter;
+    if (childRouter) {
+        let path = navigationInstruction.getWildcardPath();
+        const childInstruction = await childRouter._createNavigationInstruction(path, navigationInstruction);
+        viewPortPlan.childNavigationInstruction = childInstruction;
+        const childPlan = await _buildNavigationPlan(childInstruction);
+        if (childPlan instanceof Redirect) {
+            return Promise.reject(childPlan);
+        }
+        childInstruction.plan = childPlan;
+        viewPortInstruction.childNavigationInstruction = childInstruction;
+        return loadNewRoute(routeLoader, childInstruction);
+    }
+    return undefined;
 }
-/*@internal*/ function loadComponent(routeLoader, navigationInstruction, config) {
-    return __awaiter(this, void 0, void 0, function* () {
-        let router = navigationInstruction.router;
-        let lifecycleArgs = navigationInstruction.lifecycleArgs;
-        let component = yield routeLoader.loadRoute(router, config, navigationInstruction);
-        let { viewModel, childContainer } = component;
-        component.router = router;
-        component.config = config;
-        if ('configureRouter' in viewModel) {
-            let childRouter = childContainer.getChildRouter();
-            component.childRouter = childRouter;
-            yield childRouter.configure(c => viewModel.configureRouter(c, childRouter, ...lifecycleArgs));
-        }
-        return component;
-    });
+/*@internal*/ async function loadComponent(routeLoader, navigationInstruction, config) {
+    let router = navigationInstruction.router;
+    let lifecycleArgs = navigationInstruction.lifecycleArgs;
+    let component = await routeLoader.loadRoute(router, config, navigationInstruction);
+    let { viewModel, childContainer } = component;
+    component.router = router;
+    component.config = config;
+    if ('configureRouter' in viewModel) {
+        let childRouter = childContainer.getChildRouter();
+        component.childRouter = childRouter;
+        await childRouter.configure(c => viewModel.configureRouter(c, childRouter, ...lifecycleArgs));
+    }
+    return component;
 }
 
 /**@internal exported for unit testing */
@@ -1880,34 +1844,31 @@ class AppRouter extends Router {
     * @param viewPort The viewPort.
     * @param name The name of the viewPort. 'default' if unspecified.
     */
-    registerViewPort(viewPort, name) {
-        const _super = name => super[name];
-        return __awaiter(this, void 0, void 0, function* () {
-            _super("registerViewPort").call(this, viewPort, name);
-            if (!this.isActive) {
-                const viewModel = this._findViewModel(viewPort);
-                if ('configureRouter' in viewModel) {
-                    if (!this.isConfigured) {
-                        const resolveConfiguredPromise = this._resolveConfiguredPromise;
-                        // tslint:disable-next-line
-                        this._resolveConfiguredPromise = () => { };
-                        yield this.configure(config => {
-                            viewModel.configureRouter(config, this);
-                            return config;
-                        });
-                        this.activate();
-                        resolveConfiguredPromise();
-                    }
-                }
-                else {
+    async registerViewPort(viewPort, name) {
+        super.registerViewPort(viewPort, name);
+        if (!this.isActive) {
+            const viewModel = this._findViewModel(viewPort);
+            if ('configureRouter' in viewModel) {
+                if (!this.isConfigured) {
+                    const resolveConfiguredPromise = this._resolveConfiguredPromise;
+                    // tslint:disable-next-line
+                    this._resolveConfiguredPromise = () => { };
+                    await this.configure(config => {
+                        viewModel.configureRouter(config, this);
+                        return config;
+                    });
                     this.activate();
+                    resolveConfiguredPromise();
                 }
             }
             else {
-                this._dequeueInstruction();
+                this.activate();
             }
-            return Promise.resolve();
-        });
+        }
+        else {
+            this._dequeueInstruction();
+        }
+        return Promise.resolve();
     }
     /**
     * Activates the router. This instructs the router to begin listening for history changes and processing instructions.
@@ -1941,64 +1902,62 @@ class AppRouter extends Router {
         });
     }
     /**@internal */
-    _dequeueInstruction(instructionCount = 0) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // keep the timing for backward compat
-            yield Promise.resolve();
-            if (this.isNavigating && !instructionCount) {
-                return undefined;
-            }
-            let instruction = this._queue.shift();
-            this._queue.length = 0;
-            if (!instruction) {
-                return undefined;
-            }
-            this.isNavigating = true;
-            let navtracker = this.history.getState('NavigationTracker');
-            if (!navtracker && !this.currentNavigationTracker) {
-                this.isNavigatingFirst = true;
-                this.isNavigatingNew = true;
-            }
-            else if (!navtracker) {
-                this.isNavigatingNew = true;
-            }
-            else if (!this.currentNavigationTracker) {
-                this.isNavigatingRefresh = true;
-            }
-            else if (this.currentNavigationTracker < navtracker) {
-                this.isNavigatingForward = true;
-            }
-            else if (this.currentNavigationTracker > navtracker) {
-                this.isNavigatingBack = true;
-            }
-            if (!navtracker) {
-                navtracker = Date.now();
-                this.history.setState('NavigationTracker', navtracker);
-            }
-            this.currentNavigationTracker = navtracker;
-            instruction.previousInstruction = this.currentInstruction;
-            if (!instructionCount) {
-                this.events.publish('router:navigation:processing', { instruction });
-            }
-            else if (instructionCount === this.maxInstructionCount - 1) {
-                logger.error(`${instructionCount + 1} navigation instructions have been attempted without success. Restoring last known good location.`);
-                restorePreviousLocation(this);
-                return this._dequeueInstruction(instructionCount + 1);
-            }
-            else if (instructionCount > this.maxInstructionCount) {
-                throw new Error('Maximum navigation attempts exceeded. Giving up.');
-            }
-            let pipeline = this.pipelineProvider.createPipeline(!this.couldDeactivate);
-            let result;
-            try {
-                const $result = yield pipeline.run(instruction);
-                result = yield processResult(instruction, $result, instructionCount, this);
-            }
-            catch (error) {
-                result = { output: error instanceof Error ? error : new Error(error) };
-            }
-            return resolveInstruction(instruction, result, !!instructionCount, this);
-        });
+    async _dequeueInstruction(instructionCount = 0) {
+        // keep the timing for backward compat
+        await Promise.resolve();
+        if (this.isNavigating && !instructionCount) {
+            return undefined;
+        }
+        let instruction = this._queue.shift();
+        this._queue.length = 0;
+        if (!instruction) {
+            return undefined;
+        }
+        this.isNavigating = true;
+        let navtracker = this.history.getState('NavigationTracker');
+        if (!navtracker && !this.currentNavigationTracker) {
+            this.isNavigatingFirst = true;
+            this.isNavigatingNew = true;
+        }
+        else if (!navtracker) {
+            this.isNavigatingNew = true;
+        }
+        else if (!this.currentNavigationTracker) {
+            this.isNavigatingRefresh = true;
+        }
+        else if (this.currentNavigationTracker < navtracker) {
+            this.isNavigatingForward = true;
+        }
+        else if (this.currentNavigationTracker > navtracker) {
+            this.isNavigatingBack = true;
+        }
+        if (!navtracker) {
+            navtracker = Date.now();
+            this.history.setState('NavigationTracker', navtracker);
+        }
+        this.currentNavigationTracker = navtracker;
+        instruction.previousInstruction = this.currentInstruction;
+        if (!instructionCount) {
+            this.events.publish('router:navigation:processing', { instruction });
+        }
+        else if (instructionCount === this.maxInstructionCount - 1) {
+            logger.error(`${instructionCount + 1} navigation instructions have been attempted without success. Restoring last known good location.`);
+            restorePreviousLocation(this);
+            return this._dequeueInstruction(instructionCount + 1);
+        }
+        else if (instructionCount > this.maxInstructionCount) {
+            throw new Error('Maximum navigation attempts exceeded. Giving up.');
+        }
+        let pipeline = this.pipelineProvider.createPipeline(!this.couldDeactivate);
+        let result;
+        try {
+            const $result = await pipeline.run(instruction);
+            result = await processResult(instruction, $result, instructionCount, this);
+        }
+        catch (error) {
+            result = { output: error instanceof Error ? error : new Error(error) };
+        }
+        return resolveInstruction(instruction, result, !!instructionCount, this);
     }
     /**@internal */
     _findViewModel(viewPort) {
@@ -2018,32 +1977,30 @@ class AppRouter extends Router {
         return undefined;
     }
 }
-function processResult(instruction, result, instructionCount, router) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (!(result && 'completed' in result && 'output' in result)) {
-            result = result || {};
-            result.output = new Error(`Expected router pipeline to return a navigation result, but got [${JSON.stringify(result)}] instead.`);
-        }
-        let finalResult = null;
-        let navigationCommandResult = null;
-        if (isNavigationCommand(result.output)) {
-            navigationCommandResult = result.output.navigate(router);
-        }
-        else {
-            finalResult = result;
-            if (!result.completed) {
-                if (result.output instanceof Error) {
-                    logger.error(result.output.toString());
-                }
-                restorePreviousLocation(router);
+async function processResult(instruction, result, instructionCount, router) {
+    if (!(result && 'completed' in result && 'output' in result)) {
+        result = result || {};
+        result.output = new Error(`Expected router pipeline to return a navigation result, but got [${JSON.stringify(result)}] instead.`);
+    }
+    let finalResult = null;
+    let navigationCommandResult = null;
+    if (isNavigationCommand(result.output)) {
+        navigationCommandResult = result.output.navigate(router);
+    }
+    else {
+        finalResult = result;
+        if (!result.completed) {
+            if (result.output instanceof Error) {
+                logger.error(result.output.toString());
             }
+            restorePreviousLocation(router);
         }
-        // The navigation returns void
-        // is this necessary
-        yield navigationCommandResult;
-        const innerResult = yield router._dequeueInstruction(instructionCount + 1);
-        return finalResult || innerResult || result;
-    });
+    }
+    // The navigation returns void
+    // is this necessary
+    await navigationCommandResult;
+    const innerResult = await router._dequeueInstruction(instructionCount + 1);
+    return finalResult || innerResult || result;
 }
 function resolveInstruction(instruction, result, isInnerInstruction, router) {
     instruction.resolve(result);
